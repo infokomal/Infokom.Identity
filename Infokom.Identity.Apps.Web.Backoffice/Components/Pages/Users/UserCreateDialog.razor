@@ -1,0 +1,150 @@
+﻿@using Infokom.Identity.App.Models
+@implements IDialogContentComponent
+
+@* <FluentDialogHeader ShowDismiss="true" >
+</FluentDialogHeader> *@
+
+<FluentDialogBody>
+	@if (Input is not null)
+	{
+
+
+
+
+		<FluentWizard StepperPosition="StepperPosition.Top"
+				    StepSequence="WizardStepSequence.Visited"
+				    DisplayStepNumber="@(WizardStepStatus.Current | WizardStepStatus.Next)"
+				    Border="WizardBorder.Outside"
+				    OnFinish="SubmitAsync">
+
+
+			<Steps>
+				<FluentWizardStep Label="Profile" OnChange="@OnStepChange">
+
+				</FluentWizardStep>
+
+				<FluentWizardStep Label="Contact" OnChange="@OnStepChange">
+					<FluentEditForm Model="Input.Contact" FormName="ContactInfo">
+						<DataAnnotationsValidator />
+
+						<FluentStack Orientation="Orientation.Vertical">
+							<FluentTextField @bind-Value="Input.Contact.Email" Label="Email Address" TextFieldType="TextFieldType.Email" Style="width:100%" />
+							<FluentTextField @bind-Value="Input.Contact.Phone" Label="Phone Number" TextFieldType="TextFieldType.Tel" Style="width:100%" />
+						</FluentStack>
+					</FluentEditForm>
+				</FluentWizardStep>
+
+				<FluentWizardStep Label="Preferences" OnChange="@OnStepChange">
+					<FluentEditForm Model="Input.Preferences" FormName="ContactInfo">
+						<DataAnnotationsValidator />
+
+						<FluentSelect TOption="CountryInfo" Items="CountryInfo.Countries" OptionValue="x => x.Code" OptionText="x => x.Name" SelectedOption="Input.Preferences.Country" Label="Country" Height="300px" />
+						<FluentSelect TOption="LanguageInfo" Items="LanguageInfo.Languages" OptionValue="x => x.Code" OptionText="x => x.Name" SelectedOption="Input.Preferences.Language" Label="Language" Height="300px" />
+						<FluentSelect TOption="CurrencyInfo" Items="CurrencyInfo.Currencies" OptionValue="x => x.Code" OptionText="x => x.Name" SelectedOption="Input.Preferences.Currency" Label="Currency" Height="300px" />
+					</FluentEditForm>
+				</FluentWizardStep>
+
+				<FluentWizardStep Label="Account" OnChange="@OnStepChange">
+					<FluentStack Orientation="Orientation.Vertical">
+						<FluentEditForm Model="Input.Account" FormName="AccountInfo" Context="x">
+							<DataAnnotationsValidator />
+
+							<FluentTextField @bind-Value="Input.Account.Username" Label="User Name" TextFieldType="TextFieldType.Text" Style="width:100%" />
+
+							<FluentTextField @bind-Value="Input.Account.Password" Label="Password" TextFieldType="TextFieldType.Password" />
+
+							<FluentTextField @bind-Value="Input.Account.ConfirmPassword" Label="Confirm Password" TextFieldType="TextFieldType.Password" Style="width:100%" />
+						</FluentEditForm>
+
+					</FluentStack>
+				</FluentWizardStep>
+			</Steps>
+
+		</FluentWizard>
+	}
+</FluentDialogBody>
+
+@* <FluentDialogFooter>
+	<FluentButton Appearance="Appearance.Accent" OnClick="@SubmitAsync">
+		Save
+	</FluentButton>
+	<FluentButton Appearance="Appearance.Neutral" OnClick="@CancelAsync">
+		Cancel
+	</FluentButton>
+</FluentDialogFooter> *@
+
+	@code {
+	[Inject]
+	IToastService ToastService { get; set; } = default!;
+
+	[Inject]
+	IDialogService DialogService { get; set; } = default!;
+
+	[Inject]
+	private IMediator Mediator { get; set; } = default!;
+
+	[CascadingParameter]
+	public FluentDialog Dialog { get; set; } = default!;
+
+
+
+
+
+	[Parameter]
+	public UserCreateCommandRequest Input { get; set; } = new UserCreateCommandRequest();
+
+	private EditContext _editContext = default!;
+
+
+
+
+	bool IsTop = false;
+	WizardStepSequence StepSequence = WizardStepSequence.Linear;
+	void OnStepChange(FluentWizardStepChangeEventArgs e)
+	{
+		System.Diagnostics.Debug.WriteLine($"Go to step {e.TargetLabel} (#{e.TargetIndex})");
+	}
+
+	protected override void OnInitialized()
+	{
+		Dialog!.TogglePrimaryActionButton(false);
+
+		_editContext = new EditContext(Input);
+		_editContext.OnFieldChanged += FieldChanged;
+	}
+
+	private void FieldChanged(object sender, FieldChangedEventArgs args)
+	{
+
+	}
+
+	private async Task SubmitAsync()
+	{
+		if (_editContext.Validate())
+		{
+			var response = await Mediator.Send(Input);
+
+			if (response.Success)
+			{
+				await Dialog.CloseAsync(response.Data);
+
+				ToastService.ShowSuccess("User created successfully.");
+			}
+			else
+			{
+				ToastService.ShowError(response.Message);
+			}
+		}
+		else
+		{
+			var errors = string.Join("<br/>", _editContext.GetValidationMessages());
+			ToastService.ShowError(errors);
+		}
+
+	}
+
+	private async Task CancelAsync()
+	{
+		await Dialog.CancelAsync();
+	}
+}

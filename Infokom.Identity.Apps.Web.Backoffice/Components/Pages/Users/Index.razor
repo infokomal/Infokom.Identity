@@ -1,0 +1,239 @@
+﻿@page "/users"
+@using Infokom.Identity.App.Models
+
+<h3>Search</h3>
+
+
+<FluentStack Orientation="Orientation.Vertical">
+	<FluentStack Orientation="Orientation.Horizontal">
+		<FluentStack Orientation="Orientation.Horizontal">
+			<FluentTextField @bind-Value="UserName" TextFieldType="TextFieldType.Text" Placeholder="Enter user name ..." />
+			<FluentButton Appearance="Appearance.Outline" @onclick="() => Search()">Search</FluentButton>
+			<FluentButton Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size16.ArrowCounterclockwise()" @onclick="() => Reload()"/>
+		</FluentStack>
+		<FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.Right">
+			<FluentButton Appearance="Appearance.Outline" IconStart="new Icons.Regular.Size16.Add()" Title="Add" @onclick="() => InsertAsync()" />
+		</FluentStack>
+	</FluentStack>
+	<FluentStack Orientation="Orientation.Horizontal">
+		<FluentDataGrid @ref="DataGrid" TGridItem=UserInfo ItemsProvider="LoadUsers" Pagination="Pagination">
+			<PropertyColumn Property="x => x.Name">
+				<HeaderCellTitleTemplate>
+					<FluentStack Orientation="Orientation.Horizontal">
+						<FluentIcon Icon="Icons.Color.Size20.Person" />
+						User Name
+					</FluentStack>
+				</HeaderCellTitleTemplate>
+			</PropertyColumn>
+			<TemplateColumn>
+				<HeaderCellTitleTemplate>
+					<FluentStack Orientation="Orientation.Horizontal">
+						<FluentIcon Icon="Icons.Color.Size20.Mail" />
+						Email
+					</FluentStack>
+				</HeaderCellTitleTemplate>
+				<ChildContent>
+					<FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+						<FluentLabel>@context.Email.Address</FluentLabel>
+						@if (context.Email.IsConfirmed)
+						{
+							<FluentIcon Icon="Icons.Regular.Size12.Checkmark" Color="Color.Success" Title="Email address confirmed"></FluentIcon>
+						}
+						else
+						{
+							<FluentIcon Icon="Icons.Regular.Size12.Dismiss" Color="Color.Error" Title="Email address not yet confirmed"></FluentIcon>
+						}
+					</FluentStack>
+				</ChildContent>
+			</TemplateColumn>
+			<TemplateColumn Title="Phone">
+				<HeaderCellTitleTemplate>
+					<FluentStack Orientation="Orientation.Horizontal">
+						<FluentIcon Icon="Icons.Color.Size20.Phone" />
+						Phone
+					</FluentStack>
+				</HeaderCellTitleTemplate>
+				<ChildContent>
+					<FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+						<FluentLabel>@context.Phone.Number</FluentLabel>
+						@if (context.Phone.IsConfirmed)
+						{
+							<FluentIcon Icon="Icons.Regular.Size12.Checkmark" Color="Color.Success" Title="Phone number confirmed"></FluentIcon>
+						}
+						else
+						{
+							<FluentIcon Icon="Icons.Regular.Size12.Dismiss" Color="Color.Error" Title="Phone number not yet confirmed"></FluentIcon>
+						}
+					</FluentStack>
+				</ChildContent>
+			</TemplateColumn>
+			<TemplateColumn Title="2FA" Width="150px" Sortable="false">
+				<HeaderCellTitleTemplate>
+					<FluentStack Orientation="Orientation.Horizontal">
+						<FluentIcon Icon="Icons.Color.Size20.Certificate" />
+						2FA
+					</FluentStack>
+				</HeaderCellTitleTemplate>
+				<ChildContent>
+					<FluentCheckbox @bind-Value="context.Has2FA" CheckStateChanged="_ => Has2FAChanged(context)" />
+				</ChildContent>
+			</TemplateColumn>
+			<TemplateColumn Width="150px" Sortable="false">
+				<HeaderCellTitleTemplate>
+					<FluentStack Orientation="Orientation.Horizontal">
+						<FluentIcon Icon="Icons.Color.Size20.LockClosed" />
+						Locked
+					</FluentStack>
+				</HeaderCellTitleTemplate>
+				<ChildContent>
+					<FluentStack Orientation="Orientation.Horizontal" HorizontalAlignment="HorizontalAlignment.SpaceBetween">
+						@if (context.IsLocked)
+						{
+							<FluentIcon Icon="Icons.Regular.Size16.LockClosed" Color="Color.Error" Title="Account locked"></FluentIcon>
+						}
+						else
+						{
+							<FluentIcon Icon="Icons.Regular.Size16.LockOpen" Color="Color.Success" Title="Account unlocked"></FluentIcon>
+						}
+					</FluentStack>
+				</ChildContent>
+
+			</TemplateColumn>
+			<TemplateColumn Width="150px" Sortable="false">
+				<FluentStack Orientation="Orientation.Horizontal">
+					<FluentButton IconStart="new Icons.Regular.Size16.Open().WithColor(Color.Success)" Title="Open" />
+					<FluentButton IconStart="new Icons.Regular.Size16.Edit().WithColor(Color.Warning)" Title="Edit" />
+					<FluentButton IconStart="new Icons.Regular.Size16.Delete().WithColor(Color.Error)" Title="Delete" />
+				</FluentStack>
+
+			</TemplateColumn>
+		</FluentDataGrid>
+
+	</FluentStack>
+	<FluentPaginator State="@Pagination"  />
+</FluentStack>
+
+
+
+@code {
+
+	[Inject]
+	IToastService ToastService { get; set; } = default!;
+
+	[Inject]
+	IDialogService DialogService { get; set; } = default!;
+
+	[Inject]
+	IMediator Mediator { get; set; } = default!;
+
+	string UserName { get; set; } = string.Empty;
+
+	string UserEmail { get; set; } = string.Empty;
+
+	FluentDataGrid<UserInfo> DataGrid { get; set; } = default!;
+
+	PaginationState Pagination { get; set; } = new PaginationState { ItemsPerPage = 20 };
+
+
+
+	private async ValueTask<GridItemsProviderResult<UserInfo>> LoadUsers(GridItemsProviderRequest<UserInfo> request)
+	{
+		var response = await this.Mediator.Send
+		(
+			new UserSearchQueryRequest(this.UserName, request.StartIndex, request.Count ?? 20)
+		);
+
+		return new GridItemsProviderResult<UserInfo>()
+		{
+			TotalItemCount = response.TotalCount,
+			Items = response.Items
+		};
+	}
+
+	private async Task Reload()
+	{
+		this.UserName = string.Empty;
+
+		await this.Search();
+	}
+
+	private async Task Search()
+	{
+		await this.DataGrid.RefreshDataAsync();
+	}
+
+	private async Task InsertAsync()
+	{
+		var dialog = await DialogService.ShowDialogAsync<UserCreateDialog>(new DialogParameters()
+		{
+			// Title = $"New User",
+			// TitleTypo = Typography.Header,
+			Width = "640px",
+			PreventScroll = true,
+			 PrimaryAction = null,
+			 SecondaryAction = null,
+			 
+		});
+
+		var result = await dialog.Result;
+
+		if (!result.Cancelled)
+		{
+			await DataGrid.RefreshDataAsync();
+		}
+	}
+
+	private async Task Has2FAChanged(UserInfo user)
+	{
+		var request = new UserHasTwoFactorToggleRequest
+		{
+			User = user.Name,
+			Enabled = user.Has2FA
+		};
+
+		var response = await Mediator.Send(request);
+
+		if (response.Succeeded)
+		{
+			ToastService.ShowSuccess($"Two factor {(user.Has2FA ? "enabled" : "disabled")} for {user.Name}");
+		}
+		else
+		{
+			// Revert change
+			user.Has2FA = !user.Has2FA;
+
+			ToastService.ShowError("Failed to update two-factor authentication setting.");
+			foreach (var error in response.Errors)
+			{
+				ToastService.ShowError($"{error.Code}:{error.Description}");
+			}
+		}
+	}
+
+	private async Task IsLockedChanged(UserInfo user)
+	{
+		var request = new UserLockToggleRequest
+		{
+			User = user.Name,
+			IsLocked = user.IsLocked
+		};
+
+		var response = await Mediator.Send(request);
+
+		if (response.Succeeded)
+		{
+			ToastService.ShowSuccess($"Account {(user.IsLocked ? "locked" : "unlocked")} for {user.Name}");
+		}
+		else
+		{
+			// Revert change
+			user.IsLocked = !user.IsLocked;
+
+			ToastService.ShowError("Failed to change account lock setting.");
+			foreach (var error in response.Errors)
+			{
+				ToastService.ShowError($"{error.Code}:{error.Description}");
+			}
+		}
+	}
+}
